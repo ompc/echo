@@ -5,7 +5,7 @@ package com.github.ompc.echo.server;
  * @author vlinux
  *
  */
-public class Configer {
+public class Config {
 
 	/*
 	 * backlog
