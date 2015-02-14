@@ -75,10 +75,6 @@ public class SimpleEchoServer implements EchoServer {
      */
     private void doSelect(final Selector selector) throws IOException {
 
-        final ByteBuffer heartBeatBuffer = ByteBuffer.allocate(1);
-        heartBeatBuffer.put((byte) 0);
-        heartBeatBuffer.flip();
-
         while (selector.select() > 0) {
             final Iterator<SelectionKey> it = selector.selectedKeys().iterator();
             while (it.hasNext()) {
@@ -91,7 +87,7 @@ public class SimpleEchoServer implements EchoServer {
                     final SocketChannel socketChannel = serverSocketChannel.accept();
                     socketChannel.configureBlocking(false);
                     socketChannel.register(selector, OP_READ | OP_WRITE, allocate(BUFF_SIZE));
-                    info("echo-server accept an connection, client=%s", socketChannel);
+                    info("simple-echo-server accept an connection, client=%s", socketChannel);
                 }
 
                 // do sc read
@@ -137,7 +133,7 @@ public class SimpleEchoServer implements EchoServer {
                         while (writeBuff.hasRemaining()) {
                             socketChannel.write(writeBuff);
                         }
-                    } catch(IOException e) {
+                    } catch (IOException e) {
                         warn(e, "write data failed, client=%s will be close.", socketChannel);
                         closeSocketChannel(key, socketChannel);
                     }
