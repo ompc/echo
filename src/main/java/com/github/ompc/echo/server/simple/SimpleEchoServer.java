@@ -10,20 +10,16 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.github.ompc.echo.server.Constants.BUFF_SIZE;
-import static com.github.ompc.echo.server.Constants.LOGO;
 import static com.github.ompc.echo.server.util.IOUtils.close;
 import static com.github.ompc.echo.server.util.LogUtils.info;
 import static com.github.ompc.echo.server.util.LogUtils.warn;
 import static java.net.StandardSocketOptions.SO_REUSEADDR;
 import static java.nio.ByteBuffer.allocate;
 import static java.nio.channels.SelectionKey.OP_READ;
-import static java.nio.channels.SelectionKey.OP_WRITE;
 
 /**
  * 服务器状态<br/>
@@ -86,7 +82,7 @@ public class SimpleEchoServer implements EchoServer {
                     final ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
                     final SocketChannel socketChannel = serverSocketChannel.accept();
                     socketChannel.configureBlocking(false);
-                    socketChannel.register(selector, OP_READ | OP_WRITE, allocate(BUFF_SIZE));
+                    socketChannel.register(selector, OP_READ, allocate(BUFF_SIZE));
                     info("simple-echo-server accept an connection, client=%s", socketChannel);
                 }
 
@@ -122,31 +118,8 @@ public class SimpleEchoServer implements EchoServer {
 
                 }
 
-                // do welcome write
-                if (key.isValid() && key.isWritable()) {
-
-                    key.interestOps(key.interestOps() & ~OP_WRITE);
-                    final ByteBuffer writeBuff = ByteBuffer.wrap(welcome().getBytes("UTF-8"));
-                    final SocketChannel socketChannel = (SocketChannel) key.channel();
-
-                    try {
-                        while (writeBuff.hasRemaining()) {
-                            socketChannel.write(writeBuff);
-                        }
-                    } catch (IOException e) {
-                        warn(e, "write data failed, client=%s will be close.", socketChannel);
-                        closeSocketChannel(key, socketChannel);
-                    }
-
-                }
-
             }
         }
-    }
-
-    private String welcome() {
-        final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        return LOGO + "\n" + "Welcome to ECHO-SERVER(version:1.0.0), Today is " + sdf.format(new Date()) + "\n\n";
     }
 
     private void closeSocketChannel(SelectionKey key, SocketChannel socketChannel) {
