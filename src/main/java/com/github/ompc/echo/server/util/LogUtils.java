@@ -60,6 +60,17 @@ public class LogUtils {
     }
 
 
+    /**
+     * warn级日志
+     *
+     * @param format 日志格式,同String.format()
+     * @param args   日志参数,同String.format()
+     */
+    public static void warn(String format, Object... args) {
+        if (logger.isLoggable(WARNING)) {
+            logger.log(WARNING, format(format, args));
+        }
+    }
 
     /**
      * warn级日志

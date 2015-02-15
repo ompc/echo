@@ -29,6 +29,7 @@ public class AppLauncher {
         cfg.setBacklog(32);
         cfg.setConnectTimeoutSec(10);
         cfg.setPort(7341);
+        cfg.setHighPerformanceForMulti(false);
 
 
         final EchoServer server = isMulti(args)

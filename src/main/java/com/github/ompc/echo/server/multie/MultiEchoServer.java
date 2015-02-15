@@ -20,11 +20,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.github.ompc.echo.server.Constants.BUFF_SIZE;
+import static com.github.ompc.echo.server.multie.State.INIT;
+import static com.github.ompc.echo.server.multie.State.STARTUP;
 import static com.github.ompc.echo.server.util.IOUtils.close;
 import static com.github.ompc.echo.server.util.LogUtils.info;
 import static com.github.ompc.echo.server.util.LogUtils.warn;
 import static java.net.StandardSocketOptions.SO_REUSEADDR;
 import static java.nio.ByteBuffer.allocate;
+import static java.nio.channels.SelectionKey.OP_ACCEPT;
 import static java.nio.channels.SelectionKey.OP_READ;
 import static java.util.Arrays.asList;
 
@@ -75,7 +78,7 @@ class Selectors implements Closeable {
  */
 public class MultiEchoServer implements EchoServer {
 
-    private final AtomicReference<State> stateRef = new AtomicReference<>(State.INIT);
+    private final AtomicReference<State> stateRef = new AtomicReference<>(INIT);
     private final ExecutorService workerPool;
     private final int workerSize;
 
@@ -94,7 +97,7 @@ public class MultiEchoServer implements EchoServer {
     @Override
     public void startup(final Config cfg) throws IOException {
 
-        if (!stateRef.compareAndSet(State.INIT, State.STARTUP)) {
+        if (!stateRef.compareAndSet(INIT, STARTUP)) {
             throw new IllegalStateException("echo-server was already started.");
         }
 
@@ -104,14 +107,14 @@ public class MultiEchoServer implements EchoServer {
 
             serverSocketChannel.configureBlocking(false);
             serverSocketChannel.setOption(SO_REUSEADDR, true);
-            serverSocketChannel.register(accepterSelector, SelectionKey.OP_ACCEPT);
+            serverSocketChannel.register(accepterSelector, OP_ACCEPT);
 
             // 服务器挂载端口
             serverSocketChannel.bind(new InetSocketAddress(cfg.getPort()), cfg.getBacklog());
             info("multi-echo-server listened on port=%d;", cfg.getPort());
 
-            startupWorker(workerSelectors);
-            doAccepter(accepterSelector, workerSelectors);
+            startupWorker(cfg, workerSelectors);
+            doAccepter(cfg, accepterSelector, workerSelectors);
 
         }
 
@@ -120,15 +123,16 @@ public class MultiEchoServer implements EchoServer {
     /**
      * 启动工作线程
      *
+     * @param cfg             config
      * @param workerSelectors workerSelectors
      */
-    private void startupWorker(Selectors workerSelectors) {
+    private void startupWorker(final Config cfg, final Selectors workerSelectors) {
         for (int i = 0; i < workerSize; i++) {
             final Selector workerSelector = workerSelectors.next();
             workerPool.execute(() -> {
                 for (; ; ) {
                     try {
-                        doWorker(workerSelector);
+                        doWorker(cfg, workerSelector);
                     } catch (Throwable t) {
                         warn(t, "worker failed.");
                     }
@@ -137,7 +141,7 @@ public class MultiEchoServer implements EchoServer {
         }
     }
 
-    private void doAccepter(final Selector selector, final Selectors workerSelectors) throws IOException {
+    private void doAccepter(final Config cfg, final Selector selector, final Selectors workerSelectors) throws IOException {
 
         while (selector.select() > 0) {
             final Iterator<SelectionKey> it = selector.selectedKeys().iterator();
@@ -154,7 +158,12 @@ public class MultiEchoServer implements EchoServer {
                     // 新来的SocketChannel需要注册到selector才能工作，但只有占用到selector的锁才能被register
                     // 所以这里必须先暂存到队列中，然后唤醒其中一个selector，让其在select()之后完成注册
                     registerQueue.offer(workerSocketChannel);
-                    workerSelectors.next().wakeup();
+
+                    // 高性能模式实现
+                    if (!cfg.isHighPerformanceForMulti()) {
+                        workerSelectors.next().wakeup();
+                    }
+
 
                 }
 
@@ -163,15 +172,31 @@ public class MultiEchoServer implements EchoServer {
 
     }
 
-    private void doWorker(final Selector workerSelector) throws IOException {
+    private void doWorker(final Config cfg, final Selector workerSelector) throws IOException {
 
-        workerSelector.select();
+        // 高性能模式实现
+        if (cfg.isHighPerformanceForMulti()) {
+            workerSelector.selectNow();
+        } else {
+            workerSelector.select();
+        }
+
 
         // 待select()之后拿到锁，此时可以完成注册动作
         if (!registerQueue.isEmpty()) {
             final SocketChannel workerSocketChannel = registerQueue.poll();
-            workerSocketChannel.configureBlocking(false);
-            workerSocketChannel.register(workerSelector, OP_READ /*| OP_WRITE*/, allocate(BUFF_SIZE));
+
+            if (null == workerSocketChannel) {
+                warn("worker take socketChannel from registerQueue was null, impossible!");
+            }
+
+            // 这里和子澄在压测的时候，极端情况下出现了一个空对象的返回
+            else {
+                workerSocketChannel.configureBlocking(false);
+                workerSocketChannel.register(workerSelector, OP_READ, allocate(BUFF_SIZE));
+            }
+
+
         }
 
         final Iterator<SelectionKey> workerIt = workerSelector.selectedKeys().iterator();

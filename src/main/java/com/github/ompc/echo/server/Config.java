@@ -21,8 +21,23 @@ public class Config {
 	 * 服务端口号
 	 */
 	private int port;
-	
-	public int getBacklog() {
+
+
+    /**
+     * multi实现下的高性能模式<br/>
+     * 启用后selector的实现从select()/wakeup()切换为selectNow()
+     */
+    private boolean highPerformanceForMulti;
+
+    public boolean isHighPerformanceForMulti() {
+        return highPerformanceForMulti;
+    }
+
+    public void setHighPerformanceForMulti(boolean highPerformanceForMulti) {
+        this.highPerformanceForMulti = highPerformanceForMulti;
+    }
+
+    public int getBacklog() {
 		return backlog;
 	}
 
