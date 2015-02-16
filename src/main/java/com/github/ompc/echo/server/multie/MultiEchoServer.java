@@ -19,7 +19,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.github.ompc.echo.server.Constants.BUFF_SIZE;
 import static com.github.ompc.echo.server.multie.State.INIT;
 import static com.github.ompc.echo.server.multie.State.STARTUP;
 import static com.github.ompc.echo.server.util.IOUtils.close;
@@ -106,12 +105,19 @@ public class MultiEchoServer implements EchoServer {
              final Selectors workerSelectors = new Selectors(workerSize)) {
 
             serverSocketChannel.configureBlocking(false);
+            serverSocketChannel.socket().setSoTimeout(cfg.getConnectTimeoutSec());
             serverSocketChannel.setOption(SO_REUSEADDR, true);
             serverSocketChannel.register(accepterSelector, OP_ACCEPT);
 
             // 服务器挂载端口
-            serverSocketChannel.bind(new InetSocketAddress(cfg.getPort()), cfg.getBacklog());
-            info("multi-echo-server listened on port=%d;", cfg.getPort());
+            serverSocketChannel.bind(new InetSocketAddress(cfg.getNetworkInterface(), cfg.getPort()), cfg.getBacklog());
+            info("multi-echo-server listened on network=%s;port=%d;backlog=%d;high=%s;timeout=%d;buffer=%d;",
+                    cfg.getNetworkInterface(),
+                    cfg.getPort(),
+                    cfg.getBacklog(),
+                    cfg.isHighPerformanceForMulti(),
+                    cfg.getConnectTimeoutSec(),
+                    cfg.getBufferSize());
 
             startupWorker(cfg, workerSelectors);
             doAccepter(cfg, accepterSelector, workerSelectors);
@@ -183,7 +189,7 @@ public class MultiEchoServer implements EchoServer {
 
 
         // 待select()之后拿到锁，此时可以完成注册动作
-        if (!registerQueue.isEmpty()) {
+        while (!registerQueue.isEmpty()) {
             final SocketChannel workerSocketChannel = registerQueue.poll();
 
             if (null == workerSocketChannel) {
@@ -193,7 +199,8 @@ public class MultiEchoServer implements EchoServer {
             // 这里和子澄在压测的时候，极端情况下出现了一个空对象的返回
             else {
                 workerSocketChannel.configureBlocking(false);
-                workerSocketChannel.register(workerSelector, OP_READ, allocate(BUFF_SIZE));
+                workerSocketChannel.socket().setSoTimeout(cfg.getConnectTimeoutSec());
+                workerSocketChannel.register(workerSelector, OP_READ, allocate(cfg.getBufferSize()));
             }
 
 

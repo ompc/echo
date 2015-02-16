@@ -29,6 +29,33 @@ public class Config {
      */
     private boolean highPerformanceForMulti;
 
+
+    /**
+     * 多网卡情况下需要指定一个网络接口
+     */
+    private String networkInterface;
+
+    /**
+     * 处理缓存大小
+     */
+    private int bufferSize;
+
+    public int getBufferSize() {
+        return bufferSize;
+    }
+
+    public void setBufferSize(int bufferSize) {
+        this.bufferSize = bufferSize;
+    }
+
+    public String getNetworkInterface() {
+        return networkInterface;
+    }
+
+    public void setNetworkInterface(String networkInterface) {
+        this.networkInterface = networkInterface;
+    }
+
     public boolean isHighPerformanceForMulti() {
         return highPerformanceForMulti;
     }

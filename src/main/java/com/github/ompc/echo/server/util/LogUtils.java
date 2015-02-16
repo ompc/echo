@@ -16,22 +16,14 @@ import static java.util.logging.Level.WARNING;
  */
 public class LogUtils {
 
-    private static final Logger logger = createLogger();
+    private static volatile Logger logger = Logger.getAnonymousLogger();
 
-    private static Logger createLogger() {
-        final String logFilePath = "./echo.log";
-        final Logger logger = Logger.getAnonymousLogger();
-        try {
-
-            final FileHandler fileHandler = new FileHandler(logFilePath);
-            fileHandler.setFormatter(new SimpleFormatter());
-            logger.setUseParentHandlers(false);
-            logger.addHandler(fileHandler);
-            logger.log(INFO, format("init logger file success, file=%s",logFilePath));
-        } catch (IOException e) {
-            logger.log(WARNING,format("init logger file failed, file=%s",logFilePath));
-        }
-        return logger;
+    public static void setLogPath(String logPath) throws IOException {
+        final FileHandler fileHandler = new FileHandler(logPath);
+        fileHandler.setFormatter(new SimpleFormatter());
+        logger.setUseParentHandlers(false);
+        logger.addHandler(fileHandler);
+        logger.log(INFO, format("init logger file success, logPath=%s",logPath));
     }
 
     /**

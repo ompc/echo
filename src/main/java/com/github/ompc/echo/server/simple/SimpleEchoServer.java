@@ -13,12 +13,14 @@ import java.nio.channels.SocketChannel;
 import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.github.ompc.echo.server.Constants.BUFF_SIZE;
+import static com.github.ompc.echo.server.simple.State.INIT;
+import static com.github.ompc.echo.server.simple.State.STARTUP;
 import static com.github.ompc.echo.server.util.IOUtils.close;
 import static com.github.ompc.echo.server.util.LogUtils.info;
 import static com.github.ompc.echo.server.util.LogUtils.warn;
 import static java.net.StandardSocketOptions.SO_REUSEADDR;
 import static java.nio.ByteBuffer.allocate;
+import static java.nio.channels.SelectionKey.OP_ACCEPT;
 import static java.nio.channels.SelectionKey.OP_READ;
 
 /**
@@ -37,12 +39,12 @@ enum State {
  */
 public class SimpleEchoServer implements EchoServer {
 
-    private final AtomicReference<State> stateRef = new AtomicReference<>(State.INIT);
+    private final AtomicReference<State> stateRef = new AtomicReference<>(INIT);
 
     @Override
     public void startup(final Config cfg) throws IOException {
 
-        if (!stateRef.compareAndSet(State.INIT, State.STARTUP)) {
+        if (!stateRef.compareAndSet(INIT, STARTUP)) {
             throw new IllegalStateException("echo-server was already started.");
         }
 
@@ -50,14 +52,20 @@ public class SimpleEchoServer implements EchoServer {
              final Selector selector = Selector.open()) {
 
             serverSocketChannel.configureBlocking(false);
+            serverSocketChannel.socket().setSoTimeout(cfg.getConnectTimeoutSec());
             serverSocketChannel.setOption(SO_REUSEADDR, true);
-            serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+            serverSocketChannel.register(selector, OP_ACCEPT);
 
             // 服务器挂载端口
-            serverSocketChannel.bind(new InetSocketAddress(cfg.getPort()), cfg.getBacklog());
-            info("echo-server listened on port=%d;", cfg.getPort());
+            serverSocketChannel.bind(new InetSocketAddress(cfg.getNetworkInterface(), cfg.getPort()), cfg.getBacklog());
+            info("simple-echo-server listened on network=%s;port=%d;backlog=%d;timeout=%d;buffer=%d;",
+                    cfg.getNetworkInterface(),
+                    cfg.getPort(),
+                    cfg.getBacklog(),
+                    cfg.getConnectTimeoutSec(),
+                    cfg.getBufferSize());
 
-            doSelect(selector);
+            doSelect(cfg, selector);
 
         }
 
@@ -69,7 +77,7 @@ public class SimpleEchoServer implements EchoServer {
      * @param selector
      * @throws IOException
      */
-    private void doSelect(final Selector selector) throws IOException {
+    private void doSelect(final Config cfg, final Selector selector) throws IOException {
 
         while (selector.select() > 0) {
             final Iterator<SelectionKey> it = selector.selectedKeys().iterator();
@@ -82,7 +90,8 @@ public class SimpleEchoServer implements EchoServer {
                     final ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
                     final SocketChannel socketChannel = serverSocketChannel.accept();
                     socketChannel.configureBlocking(false);
-                    socketChannel.register(selector, OP_READ, allocate(BUFF_SIZE));
+                    socketChannel.socket().setSoTimeout(cfg.getConnectTimeoutSec());
+                    socketChannel.register(selector, OP_READ, allocate(cfg.getBufferSize()));
                     info("simple-echo-server accept an connection, client=%s", socketChannel);
                 }
 
